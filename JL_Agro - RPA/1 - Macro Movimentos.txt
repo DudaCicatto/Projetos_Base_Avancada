@@ -1,0 +1,195 @@
+Option Explicit
+
+Sub Extrair_Movimentos_Novo_Layout()
+
+    Dim wsOrigem As Worksheet, wsDestino As Worksheet
+    Dim lastRow As Long, r As Long
+    Dim outRow As Long
+    Dim i As Long
+
+    Dim colColaborador As Long, colCodigo As Long, colNome As Long
+    Dim colRef As Long, colValCalc As Long, colValInf As Long
+    Dim colTipo As Long, colUnidade As Long, colLocal As Long
+
+    Dim colaborador As String, matricula As String, empregado As String
+
+    Set wsOrigem = ActiveWorkbook.Worksheets("Movimentos")
+
+    On Error Resume Next
+    Set wsDestino = ActiveWorkbook.Worksheets("Resultado")
+    On Error GoTo 0
+
+    If wsDestino Is Nothing Then
+        Set wsDestino = ActiveWorkbook.Worksheets.Add(After:=wsOrigem)
+        wsDestino.Name = "Resultado"
+    Else
+        wsDestino.Cells.Clear
+    End If
+
+    ' Já define como texto antes de preencher
+    wsDestino.Columns("A").NumberFormat = "@"
+    wsDestino.Columns("C").NumberFormat = "@"
+
+    wsDestino.Range("A1:J1").Value = Array( _
+        "Matrícula", "Empregado", "Código", "Nome", "Referência", _
+        "Valor calculado", "Valor informado", "Tipo", "Unidade", "Local de trabalho" _
+    )
+
+    outRow = 2
+    lastRow = LastUsedRow(wsOrigem)
+
+    colColaborador = FindHeader(wsOrigem, 1, "Colaborador")
+    colCodigo = FindHeader(wsOrigem, 1, "Código")
+    colNome = FindHeader(wsOrigem, 1, "Nome")
+    colRef = FindHeader(wsOrigem, 1, "Referência")
+    If colRef = 0 Then colRef = FindHeader(wsOrigem, 1, "Referencia")
+
+    colValCalc = FindHeader(wsOrigem, 1, "Valor calculado")
+    colValInf = FindHeader(wsOrigem, 1, "Valor informado")
+    colTipo = FindHeader(wsOrigem, 1, "Tipo")
+    colUnidade = FindHeader(wsOrigem, 1, "Unidade")
+    colLocal = FindHeader(wsOrigem, 1, "Local de trabalho")
+
+    If colColaborador = 0 Or colCodigo = 0 Or colNome = 0 Or colRef = 0 _
+        Or colValCalc = 0 Or colValInf = 0 Or colTipo = 0 Or colUnidade = 0 Then
+
+        MsgBox "Não encontrei todas as colunas obrigatórias do novo layout.", vbCritical
+        Exit Sub
+    End If
+
+    For r = 2 To lastRow
+
+        colaborador = Trim(CStr(wsOrigem.Cells(r, colColaborador).Value))
+
+        If colaborador <> "" And IsEventCode(wsOrigem.Cells(r, colCodigo).Value) Then
+
+            ParseColaborador colaborador, matricula, empregado
+
+            If matricula <> "" And empregado <> "" Then
+
+                wsDestino.Cells(outRow, 1).Value = CStr(matricula)
+                wsDestino.Cells(outRow, 2).Value = empregado
+                wsDestino.Cells(outRow, 3).Value = CStr(wsOrigem.Cells(r, colCodigo).Value)
+                wsDestino.Cells(outRow, 4).Value = wsOrigem.Cells(r, colNome).Value
+                wsDestino.Cells(outRow, 5).Value = wsOrigem.Cells(r, colRef).Value
+                wsDestino.Cells(outRow, 6).Value = wsOrigem.Cells(r, colValCalc).Value
+                wsDestino.Cells(outRow, 7).Value = wsOrigem.Cells(r, colValInf).Value
+                wsDestino.Cells(outRow, 8).Value = wsOrigem.Cells(r, colTipo).Value
+                wsDestino.Cells(outRow, 9).Value = wsOrigem.Cells(r, colUnidade).Value
+
+                If colLocal > 0 Then
+                    wsDestino.Cells(outRow, 10).Value = wsOrigem.Cells(r, colLocal).Value
+                Else
+                    wsDestino.Cells(outRow, 10).Value = ""
+                End If
+
+                outRow = outRow + 1
+
+            End If
+        End If
+    Next r
+
+    ' Garante novamente após preencher
+    wsDestino.Columns("A").NumberFormat = "@"
+    wsDestino.Columns("C").NumberFormat = "@"
+
+    For i = 2 To outRow - 1
+        wsDestino.Cells(i, 1).Value = CStr(wsDestino.Cells(i, 1).Value)
+        wsDestino.Cells(i, 3).Value = CStr(wsDestino.Cells(i, 3).Value)
+    Next i
+
+    wsDestino.Columns("A:J").AutoFit
+    wsDestino.Rows(1).Font.Bold = True
+
+    MsgBox "Pronto! Registros exportados: " & (outRow - 2), vbInformation
+
+End Sub
+
+Private Function FindHeader(ws As Worksheet, headerRow As Long, headerText As String) As Long
+    Dim c As Long, lastCol As Long
+    Dim a As String, b As String
+
+    lastCol = LastUsedCol(ws)
+    b = NormalizeText(headerText)
+
+    For c = 1 To lastCol
+        a = NormalizeText(CStr(ws.Cells(headerRow, c).Value))
+        If a = b Then
+            FindHeader = c
+            Exit Function
+        End If
+    Next c
+
+    FindHeader = 0
+End Function
+
+Private Function NormalizeText(ByVal s As String) As String
+    s = LCase$(Trim$(s))
+
+    s = Replace(s, "á", "a")
+    s = Replace(s, "à", "a")
+    s = Replace(s, "ã", "a")
+    s = Replace(s, "â", "a")
+    s = Replace(s, "é", "e")
+    s = Replace(s, "ê", "e")
+    s = Replace(s, "í", "i")
+    s = Replace(s, "ó", "o")
+    s = Replace(s, "õ", "o")
+    s = Replace(s, "ô", "o")
+    s = Replace(s, "ú", "u")
+    s = Replace(s, "ç", "c")
+
+    Do While InStr(s, "  ") > 0
+        s = Replace(s, "  ", " ")
+    Loop
+
+    NormalizeText = s
+End Function
+
+Private Function IsEventCode(v As Variant) As Boolean
+    Dim s As String
+    s = Trim(CStr(v))
+
+    IsEventCode = (s <> "" And IsNumeric(s))
+End Function
+
+Private Sub ParseColaborador(ByVal s As String, ByRef matricula As String, ByRef empregado As String)
+    Dim p As Long
+
+    s = Trim(s)
+    p = InStr(1, s, " - ")
+
+    If p > 0 Then
+        matricula = Trim(Left$(s, p - 1))
+        empregado = Trim(Mid$(s, p + 3))
+    Else
+        matricula = ""
+        empregado = s
+    End If
+End Sub
+
+Private Function LastUsedRow(ws As Worksheet) As Long
+    Dim f As Range
+
+    Set f = ws.Cells.Find(What:="*", LookIn:=xlFormulas, _
+        SearchOrder:=xlByRows, SearchDirection:=xlPrevious)
+
+    If f Is Nothing Then
+        LastUsedRow = 1
+    Else
+        LastUsedRow = f.Row
+    End If
+End Function
+
+Private Function LastUsedCol(ws As Worksheet) As Long
+    Dim f As Range
+
+    Set f = ws.Cells.Find(What:="*", LookIn:=xlFormulas, _
+        SearchOrder:=xlByColumns, SearchDirection:=xlPrevious)
+
+    If f Is Nothing Then
+        LastUsedCol = 1
+    Else
+        LastUsedCol = f.Column
+    End If
+End Function
